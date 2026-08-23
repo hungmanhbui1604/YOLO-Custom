@@ -78,6 +78,8 @@ from .conv import (
     RepConv,
     SpatialAttention,
     PConv,
+    SPDConv,
+    DySample,
 )
 from .head import (
     OBB,
@@ -197,4 +199,6 @@ __all__ = (
     "PConv",
     "PConvBottleneck",
     "PConvC2f",
+    "SPDConv",
+    "DySample",
 )

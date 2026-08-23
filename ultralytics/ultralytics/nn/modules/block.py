@@ -2136,4 +2136,4 @@ class PConvC2f(C2f):
             n_div (int): Channel division factor.
         """
         super().__init__(c1, c2, n, shortcut, g, e)
-        self.m = nn.ModuleList(PConvBottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0, n_div=n_div) for _ in range(n))
+        self.m = nn.ModuleList(PConvBottleneck(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div) for _ in range(n))

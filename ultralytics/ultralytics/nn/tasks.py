@@ -79,6 +79,8 @@ from ultralytics.nn.modules import (
     PConv,
     PConvBottleneck,
     PConvC2f,
+    SPDConv,
+    DySample,
 )
 from ultralytics.utils import (
     DEFAULT_CFG_DICT,
@@ -2028,6 +2030,7 @@ def parse_model(d, ch, verbose=True):
             A2C2f,
             PConvBottleneck,
             PConvC2f,
+            SPDConv,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -2094,7 +2097,7 @@ def parse_model(d, ch, verbose=True):
                     args.extend((True, 1.2))
             if m is C2fCIB:
                 legacy = False
-        elif m is PConv:
+        elif m in frozenset({PConv, DySample}):
             c2 = ch[f]
             args = [c2, *args]
         elif m is AIFI:
