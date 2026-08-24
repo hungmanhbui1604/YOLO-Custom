@@ -56,36 +56,13 @@ __all__ = (
     "TorchVision",
     "PConvBottleneck",
     "PConvC2f",
+    "PConvC3k",
+    "PConvC3k2",
+    "PConvBottleneck_1",
+    "PConvC2f_1",
+    "PConvC3k_1",
+    "PConvC3k2_1",
 )
-
-
-class PConvBottleneck(nn.Module):
-    """Bottleneck with replacing the second Conv with PConv and PWConv."""
-
-    def __init__(
-        self, c1: int, c2: int, shortcut: bool = True, g: int = 1, k: tuple[int, int] = (3, 3), e: float = 0.5, n_div: int = 4
-    ):
-        """Initialize a PConv bottleneck module.
-
-        Args:
-            c1 (int): Input channels.
-            c2 (int): Output channels.
-            shortcut (bool): Whether to use shortcut connection.
-            g (int): Groups for convolutions.
-            k (tuple): Kernel sizes for convolutions.
-            e (float): Expansion ratio.
-            n_div (int): Channel division factor of PConv.
-        """
-        super().__init__()
-        c_ = int(c2 * e)  # hidden channels
-        self.cv1 = Conv(c1, c_, k[0], 1)
-        self.cv2 = PConv(c_, k[1], n_div)
-        self.cv3 = Conv(c_, c2, 1, 1, g=g)
-        self.add = shortcut and c1 == c2
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply PConv bottleneck with optional shortcut connection."""
-        return x + self.cv3(self.cv2(self.cv1(x))) if self.add else self.cv3(self.cv2(self.cv1(x)))
 
 
 class DFL(nn.Module):
@@ -2111,6 +2088,65 @@ class RealNVP(nn.Module):
         return -0.5 * (z.float() ** 2).sum(-1) - math.log(2 * math.pi) + log_det
 
 
+class PConvBottleneck(nn.Module):
+    """Bottleneck with replacing the second Conv with PConv and PWConv."""
+
+    def __init__(
+        self, c1: int, c2: int, shortcut: bool = True, g: int = 1, k: tuple[int, int] = (3, 3), e: float = 0.5, n_div: int = 4
+    ):
+        """Initialize a PConv bottleneck module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            shortcut (bool): Whether to use shortcut connection.
+            g (int): Groups for convolutions.
+            k (tuple): Kernel sizes for convolutions.
+            e (float): Expansion ratio.
+            n_div (int): Channel division factor of PConv.
+        """
+        super().__init__()
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, c_, k[0], 1)
+        self.cv2 = PConv(c_, k[1], n_div)
+        self.cv3 = Conv(c_, c2, 1, 1, g=g)
+        self.add = shortcut and c1 == c2
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply PConv bottleneck with optional shortcut connection."""
+        return x + self.cv3(self.cv2(self.cv1(x))) if self.add else self.cv3(self.cv2(self.cv1(x)))
+
+
+class PConvBottleneck_1(nn.Module):
+    """Bottleneck with replacing the second Conv with PConv and PWConv."""
+
+    def __init__(
+        self, c1: int, c2: int, shortcut: bool = True, g: int = 1, k: tuple[int, int] = (3, 3), e: float = 0.5, n_div: int = 4
+    ):
+        """Initialize a PConv bottleneck module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            shortcut (bool): Whether to use shortcut connection.
+            g (int): Groups for convolutions.
+            k (tuple): Kernel sizes for convolutions.
+            e (float): Expansion ratio.
+            n_div (int): Channel division factor of PConv.
+        """
+        super().__init__()
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = PConv(c1, k[0], n_div)
+        self.cv2 = Conv(c1, c_, 1, 1)
+        self.cv3 = PConv(c_, k[1], n_div)
+        self.cv4 = Conv(c_, c2, 1, 1)
+        self.add = shortcut and c1 == c2
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply PConv bottleneck with optional shortcut connection."""
+        return x + self.cv3(self.cv2(self.cv1(x))) if self.add else self.cv3(self.cv2(self.cv1(x)))
+
+
 class PConvC2f(C2f):
     """C2f with PConvBottleneck."""
 
@@ -2119,7 +2155,7 @@ class PConvC2f(C2f):
         c1: int,
         c2: int,
         n: int = 1,
-        shortcut: bool = True,
+        shortcut: bool = False,
         g: int = 1,
         e: float = 0.5,
         n_div: int = 4,
@@ -2137,3 +2173,181 @@ class PConvC2f(C2f):
         """
         super().__init__(c1, c2, n, shortcut, g, e)
         self.m = nn.ModuleList(PConvBottleneck(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div) for _ in range(n))
+
+
+class PConvC2f_1(C2f):
+    """C2f with PConvBottleneck."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        shortcut: bool = False,
+        g: int = 1,
+        e: float = 0.5,
+        n_div: int = 4,
+    ):
+        """Initialize PConvC2f module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            n (int): Number of blocks.
+            shortcut (bool): Whether to use shortcut connections.
+            g (int): Groups for convolutions.
+            e (float): Expansion ratio.
+            n_div (int): Channel division factor.
+        """
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(PConvBottleneck_1(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div) for _ in range(n))
+
+
+class PConvC3k(C3):
+    """C3k module using PConv bottlenecks."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        shortcut: bool = True,
+        g: int = 1,
+        e: float = 0.5,
+        k: int = 3,
+        n_div: int = 4,
+    ):
+        """Initialize a PConvC3k module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            n (int): Number of PConvBottleneck blocks.
+            shortcut (bool): Whether to use shortcut connections.
+            g (int): Groups for pointwise convolutions.
+            e (float): Expansion ratio.
+            k (int): Kernel size.
+            n_div (int): Channel division factor of PConv.
+        """
+        super().__init__(c1, c2, n, shortcut, g, e)
+        c_ = int(c2 * e)  # hidden channels
+        self.m = nn.Sequential(
+            *(PConvBottleneck(c_, c_, shortcut, g, k=(k, k), e=1.0, n_div=n_div) for _ in range(n))
+        )
+
+
+class PConvC3k_1(C3):
+    """C3k module using PConv bottlenecks."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        shortcut: bool = True,
+        g: int = 1,
+        e: float = 0.5,
+        k: int = 3,
+        n_div: int = 4,
+    ):
+        """Initialize a PConvC3k module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            n (int): Number of PConvBottleneck blocks.
+            shortcut (bool): Whether to use shortcut connections.
+            g (int): Groups for pointwise convolutions.
+            e (float): Expansion ratio.
+            k (int): Kernel size.
+            n_div (int): Channel division factor of PConv.
+        """
+        super().__init__(c1, c2, n, shortcut, g, e)
+        c_ = int(c2 * e)  # hidden channels
+        self.m = nn.Sequential(
+            *(PConvBottleneck_1(c_, c_, shortcut, g, k=(k, k), e=1.0, n_div=n_div) for _ in range(n))
+        )
+
+
+class PConvC3k2(C2f):
+    """C3k2 module using PConvBottleneck and PConvC3k blocks."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+        n_div: int = 4,
+    ):
+        """Initialize a PConvC3k2 module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            n (int): Number of blocks.
+            c3k (bool): Whether to use PConvC3k blocks.
+            e (float): Expansion ratio.
+            attn (bool): Whether to use attention blocks.
+            g (int): Groups for pointwise convolutions.
+            shortcut (bool): Whether to use shortcut connections.
+            n_div (int): Channel division factor of PConv.
+        """
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(
+            nn.Sequential(
+                PConvBottleneck(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div),
+                PSABlock(self.c, attn_ratio=0.5, num_heads=max(self.c // 64, 1)),
+            )
+            if attn
+            else PConvC3k(self.c, self.c, 2, shortcut, g, n_div=n_div)
+            if c3k
+            else PConvBottleneck(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div)
+            for _ in range(n)
+        )
+
+
+class PConvC3k2_1(C2f):
+    """C3k2 module using PConvBottleneck and PConvC3k blocks."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        g: int = 1,
+        shortcut: bool = True,
+        n_div: int = 4,
+    ):
+        """Initialize a PConvC3k2 module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            n (int): Number of blocks.
+            c3k (bool): Whether to use PConvC3k blocks.
+            e (float): Expansion ratio.
+            attn (bool): Whether to use attention blocks.
+            g (int): Groups for pointwise convolutions.
+            shortcut (bool): Whether to use shortcut connections.
+            n_div (int): Channel division factor of PConv.
+        """
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(
+            nn.Sequential(
+                PConvBottleneck_1(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div),
+                PSABlock(self.c, attn_ratio=0.5, num_heads=max(self.c // 64, 1)),
+            )
+            if attn
+            else PConvC3k_1(self.c, self.c, 2, shortcut, g, n_div=n_div)
+            if c3k
+            else PConvBottleneck_1(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div)
+            for _ in range(n)
+        )

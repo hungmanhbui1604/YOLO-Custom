@@ -61,6 +61,12 @@ from .block import (
     TorchVision,
     PConvBottleneck,
     PConvC2f,
+    PConvC3k,
+    PConvC3k2,
+    PConvBottleneck_1,
+    PConvC2f_1,
+    PConvC3k_1,
+    PConvC3k2_1,
 )
 from .conv import (
     CBAM,
@@ -201,4 +207,10 @@ __all__ = (
     "PConvC2f",
     "SPDConv",
     "DySample",
+    "PConvC3k",
+    "PConvC3k2",
+    "PConvBottleneck_1",
+    "PConvC2f_1",
+    "PConvC3k_1",
+    "PConvC3k2_1",
 )

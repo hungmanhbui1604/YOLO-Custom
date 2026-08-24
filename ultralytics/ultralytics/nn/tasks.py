@@ -81,6 +81,12 @@ from ultralytics.nn.modules import (
     PConvC2f,
     SPDConv,
     DySample,
+    PConvC3k,
+    PConvC3k2,
+    PConvBottleneck_1,
+    PConvC2f_1,
+    PConvC3k_1,
+    PConvC3k2_1,
 )
 from ultralytics.utils import (
     DEFAULT_CFG_DICT,
@@ -2031,6 +2037,12 @@ def parse_model(d, ch, verbose=True):
             PConvBottleneck,
             PConvC2f,
             SPDConv,
+            PConvC3k,
+            PConvC3k2,
+            PConvBottleneck_1,
+            PConvC2f_1,
+            PConvC3k_1,
+            PConvC3k2_1,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -2051,6 +2063,11 @@ def parse_model(d, ch, verbose=True):
             C2PSA,
             A2C2f,
             PConvC2f,
+            PConvC3k,
+            PConvC3k2,
+            PConvC2f_1,
+            PConvC3k_1,
+            PConvC3k2_1,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -2087,7 +2104,7 @@ def parse_model(d, ch, verbose=True):
             if m in repeat_modules:
                 args.insert(2, n)  # number of repeats
                 n = 1
-            if m is C3k2:  # for M/L/X sizes
+            if m in frozenset({C3k2, PConvC3k2, PConvC3k2_1}):  # for M/L/X sizes
                 legacy = False
                 if scale in "mlx":
                     args[3] = True

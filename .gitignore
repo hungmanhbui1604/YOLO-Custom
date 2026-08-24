@@ -2,3 +2,5 @@ AGENTS.md
 .vscode
 .codex
 .agents
+*.pt
+*.onnx
