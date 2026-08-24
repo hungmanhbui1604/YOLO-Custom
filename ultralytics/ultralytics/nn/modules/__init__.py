@@ -67,6 +67,8 @@ from .block import (
     PConvC2f_1,
     PConvC3k_1,
     PConvC3k2_1,
+    FasterNetBlock,
+    FasterC2f,
 )
 from .conv import (
     CBAM,
@@ -213,4 +215,6 @@ __all__ = (
     "PConvC2f_1",
     "PConvC3k_1",
     "PConvC3k2_1",
+    "FasterNetBlock",
+    "FasterC2f",
 )

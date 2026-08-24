@@ -87,6 +87,8 @@ from ultralytics.nn.modules import (
     PConvC2f_1,
     PConvC3k_1,
     PConvC3k2_1,
+    FasterNetBlock,
+    FasterC2f,
 )
 from ultralytics.utils import (
     DEFAULT_CFG_DICT,
@@ -2043,6 +2045,7 @@ def parse_model(d, ch, verbose=True):
             PConvC2f_1,
             PConvC3k_1,
             PConvC3k2_1,
+            FasterC2f,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -2068,6 +2071,7 @@ def parse_model(d, ch, verbose=True):
             PConvC2f_1,
             PConvC3k_1,
             PConvC3k2_1,
+            FasterC2f,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -2114,7 +2118,7 @@ def parse_model(d, ch, verbose=True):
                     args.extend((True, 1.2))
             if m is C2fCIB:
                 legacy = False
-        elif m in frozenset({PConv, DySample}):
+        elif m in frozenset({PConv, DySample, FasterNetBlock}):
             c2 = ch[f]
             args = [c2, *args]
         elif m is AIFI:

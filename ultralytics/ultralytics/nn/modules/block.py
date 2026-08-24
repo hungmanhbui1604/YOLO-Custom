@@ -62,6 +62,8 @@ __all__ = (
     "PConvC2f_1",
     "PConvC3k_1",
     "PConvC3k2_1",
+    "FasterNetBlock",
+    "FasterC2f",
 )
 
 
@@ -2351,3 +2353,89 @@ class PConvC3k2_1(C2f):
             else PConvBottleneck_1(self.c, self.c, shortcut, g, k=(3, 3), e=1.0, n_div=n_div)
             for _ in range(n)
         )
+
+
+class DropPath(nn.Module):
+    """Stochastic depth applied per sample."""
+
+    def __init__(self, drop_prob: float = 0.0):
+        super().__init__()
+        if not 0.0 <= drop_prob < 1.0:
+            raise ValueError(f"drop_prob must be in [0, 1), got {drop_prob}")
+        self.drop_prob = drop_prob
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply stochastic depth during training."""
+        if self.drop_prob == 0.0 or not self.training:
+            return x
+
+        keep_prob = 1.0 - self.drop_prob
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        mask = x.new_empty(shape).bernoulli_(keep_prob)
+        return x * mask / keep_prob
+
+
+class FasterNetBlock(nn.Module):
+    """FasterNetBlock with partial convolution and channel MLP."""
+
+    def __init__(self, c1: int, k: int = 3, n_div: int = 4, e: float = 2.0, drop_prob: float = 0.0, layer_scale_init_value: float = 0.0,
+    ):
+        """Initialize a FasterNetBlock module.
+        
+        Args:
+            c1 (int): Input channels.
+            k (int): Kernel size for PConv.
+            n_div (int): Channel division factor of PConv.
+            e (float): Expansion ratio of MLP.
+            drop_prob (float): Probability of DropPath.
+            layer_scale_init_value (float): Init value of LayerScale.
+        """
+        super().__init__()
+        c_ = int(c1 * e)
+        self.spatial_mixing = PConv(c1, k, n_div)
+        self.mlp = nn.Sequential(
+            nn.Conv2d(c1, c_, 1, 1, bias=False),
+            nn.BatchNorm2d(c_),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(c_, c1, 1, 1, bias=False),
+        )
+        self.drop_path = DropPath(drop_prob)
+        self.layer_scale = (
+            nn.Parameter(layer_scale_init_value * torch.ones(c1, 1, 1))
+            if layer_scale_init_value > 0
+            else None
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply partial spatial mixing, channel MLP, and residual connection."""
+        shortcut = x
+        x = self.mlp(self.spatial_mixing(x))
+        if self.layer_scale is not None:
+            x = self.layer_scale * x
+        return shortcut + self.drop_path(x)
+
+
+class FasterC2f(C2f):
+    """C2f with FasterNetBlock."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        shortcut: bool = False,
+        g: int = 1,
+        e: float = 0.5,
+    ):
+        """Initialize PConvC2f module.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            n (int): Number of blocks.
+            shortcut (bool): Whether to use shortcut connections.
+            g (int): Groups for convolutions.
+            e (float): Expansion ratio.
+        """
+        super().__init__(c1, c2, n, shortcut, g, e)
+        self.m = nn.ModuleList(FasterNetBlock(self.c, k=3, n_div=4, e=2.0, drop_prob=0.1, layer_scale_init_value=0.0) for _ in range(n))

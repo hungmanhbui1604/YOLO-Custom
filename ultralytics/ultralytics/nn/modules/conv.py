@@ -40,204 +40,6 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     return p
 
 
-class PConv(nn.Module):
-    """Apply spatial convolution to a subset of channels."""
-
-    def __init__(self, c1, k=3, n_div: int = 4):
-        """Initialize partial convolution.
-
-        Args:
-            c1 (int): Number of input channels.
-            k (int): Kernel size.
-            n_div (int): Channel division factor.
-        """
-        super().__init__()
-        if not 1 <= n_div <= c1:
-            raise ValueError(f"n_div must be between 1 and c1={c1}, but got {n_div}")
-        if k % 2 == 0:
-            raise ValueError("PConv requires an odd kernel size to preserve spatial dimensions")
-
-        self.c_partial = c1 // n_div
-        self.c_untouched = c1 - self.c_partial
-        self.partial_conv3 = nn.Conv2d(self.c_partial, self.c_partial, k, 1, autopad(k), bias=False)
-
-    def forward(self, x):
-        """Apply partial 3x3 convolution."""
-        x_partial, x_untouched = x.split((self.c_partial, self.c_untouched), dim=1)
-        x_partial = self.partial_conv3(x_partial)
-        return torch.cat((x_partial, x_untouched), dim=1)
-
-
-class SPDConv(nn.Module):
-    """Space-to-depth followed by a non-strided convolution."""
-
-    def __init__(self, c1, c2, k=3, scale=2, pconv=False, n_div=None, p=None, g=1, d=1, act=True):
-        """Initialize SPD-Conv.
-
-        Args:
-            c1 (int): Input channels.
-            c2 (int): Output channels.
-            k (int): Convolution kernel size.
-            scale (int): Spatial downsampling factor.
-            pconv (bool): Whether to use PConv and PWConv
-            n_div (int): Channel division factor.
-            p (int, optional): Convolution padding.
-            g (int): Convolution groups.
-            d (int): Convolution dilation.
-            act (bool | nn.Module): Activation.
-        """
-        super().__init__()
-        if not isinstance(scale, int) or scale < 2:
-            raise ValueError(f"scale must be an integer >= 2, but got {scale}")
-
-        self.scale = scale
-
-        c_ = c1 * scale**2
-        if pconv:
-            n_div = 4 if n_div is None else n_div
-            self.conv = nn.Sequential(
-                PConv(c_, k, n_div),
-                Conv(c_, c2, 1, 1, 0, g, 1, act),
-            )
-        else:
-            self.conv = Conv(c_, c2, k, 1, p, g, d, act)
-
-    def forward(self, x):
-        """Apply space-to-depth and stride-1 convolution."""
-        s = self.scale
-        x = torch.cat(
-            [x[..., row::s, col::s] for col in range(s) for row in range(s)],
-            dim=1,
-        )
-        return self.conv(x)
-
-
-class DySample(nn.Module):
-    """Content-aware upsampling by learned point sampling."""
-
-    def __init__(self, c1, scale=2, style="lp", groups=4, dyscope=False):
-        """Initialize DySample.
-
-        Args:
-            c1 (int): Number of input and output channels.
-            scale (int): Spatial upsampling factor.
-            style (str): Offset-generation style: "lp" or "pl".
-            groups (int): Number of channel groups sharing sampling offsets.
-            dyscope (bool): Use a learned dynamic offset-scope factor.
-        """
-        super().__init__()
-
-        if not isinstance(scale, int) or scale < 1:
-            raise ValueError(f"scale must be a positive integer, got {scale}")
-        if not isinstance(groups, int) or groups < 1:
-            raise ValueError(f"groups must be a positive integer, got {groups}")
-        if style not in {"lp", "pl"}:
-            raise ValueError(f"style must be 'lp' or 'pl', got {style!r}")
-        if c1 % groups != 0:
-            raise ValueError(f"c1 ({c1}) must be divisible by groups ({groups})")
-        if style == "pl" and c1 % (scale**2) != 0:
-            raise ValueError(
-                f"c1 ({c1}) must be divisible by scale**2 "
-                f"({scale**2}) when style='pl'"
-            )
-
-        self.scale = scale
-        self.style = style
-        self.groups = groups
-
-        offset_c1 = c1 // (scale**2) if style == "pl" else c1
-        offset_c2 = 2 * groups if style == "pl" else 2 * groups * scale**2
-
-        self.offset = nn.Conv2d(offset_c1, offset_c2, 1)
-        nn.init.normal_(self.offset.weight, mean=0.0, std=0.001)
-        nn.init.zeros_(self.offset.bias)
-
-        self.scope = None
-        if dyscope:
-            self.scope = nn.Conv2d(offset_c1, offset_c2, 1, bias=False)
-            nn.init.zeros_(self.scope.weight)
-
-        self.register_buffer("init_pos", self._make_init_pos())
-
-    def _make_init_pos(self):
-        """Create bilinear-style initial sampling positions."""
-        pos = torch.arange(
-            (-self.scale + 1) / 2,
-            (self.scale - 1) / 2 + 1,
-            dtype=torch.float32,
-        ) / self.scale
-
-        pos_y, pos_x = torch.meshgrid(pos, pos, indexing="ij")
-        return (
-            torch.stack((pos_x, pos_y))
-            .repeat(1, self.groups, 1)
-            .reshape(1, -1, 1, 1)
-        )
-
-    def _sample(self, x, offset):
-        """Resample the input using the learned offsets."""
-        b, _, h, w = offset.shape
-        offset = offset.view(b, 2, -1, h, w)
-
-        grid_y, grid_x = torch.meshgrid(
-            torch.arange(h, device=x.device, dtype=x.dtype) + 0.5,
-            torch.arange(w, device=x.device, dtype=x.dtype) + 0.5,
-            indexing="ij",
-        )
-        coords = torch.stack((grid_x, grid_y)).unsqueeze(0).unsqueeze(2)
-
-        normalizer = x.new_tensor((w, h)).view(1, 2, 1, 1, 1)
-        coords = 2.0 * (coords + offset) / normalizer - 1.0
-
-        coords = F.pixel_shuffle(
-            coords.view(b, -1, h, w), self.scale
-        )
-        coords = (
-            coords.view(
-                b,
-                2,
-                -1,
-                self.scale * h,
-                self.scale * w,
-            )
-            .permute(0, 2, 3, 4, 1)
-            .contiguous()
-            .flatten(0, 1)
-        )
-
-        x = x.reshape(b * self.groups, -1, h, w)
-
-        return F.grid_sample(
-            x,
-            coords,
-            mode="bilinear",
-            padding_mode="border",
-            align_corners=False,
-        ).view(b, -1, self.scale * h, self.scale * w)
-
-    def forward(self, x):
-        """Upsample an input feature map."""
-        if self.style == "pl":
-            shuffled = F.pixel_shuffle(x, self.scale)
-            offset = self.offset(shuffled)
-
-            if self.scope is not None:
-                offset = offset * self.scope(shuffled).sigmoid() * 0.5
-            else:
-                offset = offset * 0.25
-
-            offset = F.pixel_unshuffle(offset, self.scale)
-        else:
-            offset = self.offset(x)
-
-            if self.scope is not None:
-                offset = offset * self.scope(x).sigmoid() * 0.5
-            else:
-                offset = offset * 0.25
-
-        return self._sample(x, offset + self.init_pos)
-
-
 class Conv(nn.Module):
     """Standard convolution module with batch normalization and activation.
 
@@ -870,3 +672,221 @@ class Index(nn.Module):
             (torch.Tensor): Selected tensor.
         """
         return x[self.index]
+
+
+class PConv(nn.Module):
+    """FasterNet partial 3x3 convolution.
+    
+    Uses split/cat during training and slicing during inference.
+    Input and output channels are identical.
+    """
+
+    def __init__(self, c1: int, k: int = 3, n_div: int = 4):
+        """Initialize PConv.
+
+        Args:
+            c1 (int): Number of input channels.
+            k (int): Kernel size.
+            n_div (int): Channel division factor.
+        """
+        super().__init__()
+        if not 1 <= n_div <= c1:
+            raise ValueError(f"n_div must be between 1 and c1={c1}, but got {n_div}")
+        if k % 2 == 0:
+            raise ValueError("PConv requires an odd kernel size to preserve spatial dimensions")
+
+        self.c_partial = c1 // n_div
+        self.c_untouched = c1 - self.c_partial
+        self.partial_conv = nn.Conv2d(self.c_partial, self.c_partial, k, 1, autopad(k), bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.training:
+            return self.forward_split_cat(x)
+        return self.forward_slicing(x)
+
+    def forward_split_cat(self, x: torch.Tensor) -> torch.Tensor:
+        """Autograd-safe training implementation."""
+        x1, x2 = torch.split(
+            x,
+            (self.c_partial, self.c_untouched),
+            dim=1,
+        )
+        return torch.cat((self.partial_conv(x1), x2), dim=1)
+
+    def forward_slicing(self, x: torch.Tensor) -> torch.Tensor:
+        """Inference implementation."""
+        y = x.clone()
+        y[:, : self.c_partial] = self.partial_conv(
+            x[:, : self.c_partial]
+        )
+        return y
+
+
+class SPDConv(nn.Module):
+    """Space-to-depth followed by a non-strided convolution."""
+
+    def __init__(self, c1, c2, k=3, scale=2, pconv=False, n_div=None, p=None, g=1, d=1, act=True):
+        """Initialize SPD-Conv.
+
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            k (int): Convolution kernel size.
+            scale (int): Spatial downsampling factor.
+            pconv (bool): Whether to use PConv and PWConv
+            n_div (int): Channel division factor.
+            p (int, optional): Convolution padding.
+            g (int): Convolution groups.
+            d (int): Convolution dilation.
+            act (bool | nn.Module): Activation.
+        """
+        super().__init__()
+        if not isinstance(scale, int) or scale < 2:
+            raise ValueError(f"scale must be an integer >= 2, but got {scale}")
+
+        self.scale = scale
+
+        c_ = c1 * scale**2
+        if pconv:
+            n_div = 4 if n_div is None else n_div
+            self.conv = nn.Sequential(
+                PConv(c_, k, n_div),
+                Conv(c_, c2, 1, 1, 0, g, 1, act),
+            )
+        else:
+            self.conv = Conv(c_, c2, k, 1, p, g, d, act)
+
+    def forward(self, x):
+        """Apply space-to-depth and stride-1 convolution."""
+        s = self.scale
+        x = torch.cat(
+            [x[..., row::s, col::s] for col in range(s) for row in range(s)],
+            dim=1,
+        )
+        return self.conv(x)
+
+
+class DySample(nn.Module):
+    """Content-aware upsampling by learned point sampling."""
+
+    def __init__(self, c1, scale=2, style="lp", groups=4, dyscope=False):
+        """Initialize DySample.
+
+        Args:
+            c1 (int): Number of input and output channels.
+            scale (int): Spatial upsampling factor.
+            style (str): Offset-generation style: "lp" or "pl".
+            groups (int): Number of channel groups sharing sampling offsets.
+            dyscope (bool): Use a learned dynamic offset-scope factor.
+        """
+        super().__init__()
+
+        if not isinstance(scale, int) or scale < 1:
+            raise ValueError(f"scale must be a positive integer, got {scale}")
+        if not isinstance(groups, int) or groups < 1:
+            raise ValueError(f"groups must be a positive integer, got {groups}")
+        if style not in {"lp", "pl"}:
+            raise ValueError(f"style must be 'lp' or 'pl', got {style!r}")
+        if c1 % groups != 0:
+            raise ValueError(f"c1 ({c1}) must be divisible by groups ({groups})")
+        if style == "pl" and c1 % (scale**2) != 0:
+            raise ValueError(
+                f"c1 ({c1}) must be divisible by scale**2 "
+                f"({scale**2}) when style='pl'"
+            )
+
+        self.scale = scale
+        self.style = style
+        self.groups = groups
+
+        offset_c1 = c1 // (scale**2) if style == "pl" else c1
+        offset_c2 = 2 * groups if style == "pl" else 2 * groups * scale**2
+
+        self.offset = nn.Conv2d(offset_c1, offset_c2, 1)
+        nn.init.normal_(self.offset.weight, mean=0.0, std=0.001)
+        nn.init.zeros_(self.offset.bias)
+
+        self.scope = None
+        if dyscope:
+            self.scope = nn.Conv2d(offset_c1, offset_c2, 1, bias=False)
+            nn.init.zeros_(self.scope.weight)
+
+        self.register_buffer("init_pos", self._make_init_pos())
+
+    def _make_init_pos(self):
+        """Create bilinear-style initial sampling positions."""
+        pos = torch.arange(
+            (-self.scale + 1) / 2,
+            (self.scale - 1) / 2 + 1,
+            dtype=torch.float32,
+        ) / self.scale
+
+        pos_y, pos_x = torch.meshgrid(pos, pos, indexing="ij")
+        return (
+            torch.stack((pos_x, pos_y))
+            .repeat(1, self.groups, 1)
+            .reshape(1, -1, 1, 1)
+        )
+
+    def _sample(self, x, offset):
+        """Resample the input using the learned offsets."""
+        b, _, h, w = offset.shape
+        offset = offset.view(b, 2, -1, h, w)
+
+        grid_y, grid_x = torch.meshgrid(
+            torch.arange(h, device=x.device, dtype=x.dtype) + 0.5,
+            torch.arange(w, device=x.device, dtype=x.dtype) + 0.5,
+            indexing="ij",
+        )
+        coords = torch.stack((grid_x, grid_y)).unsqueeze(0).unsqueeze(2)
+
+        normalizer = x.new_tensor((w, h)).view(1, 2, 1, 1, 1)
+        coords = 2.0 * (coords + offset) / normalizer - 1.0
+
+        coords = F.pixel_shuffle(
+            coords.view(b, -1, h, w), self.scale
+        )
+        coords = (
+            coords.view(
+                b,
+                2,
+                -1,
+                self.scale * h,
+                self.scale * w,
+            )
+            .permute(0, 2, 3, 4, 1)
+            .contiguous()
+            .flatten(0, 1)
+        )
+
+        x = x.reshape(b * self.groups, -1, h, w)
+
+        return F.grid_sample(
+            x,
+            coords,
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=False,
+        ).view(b, -1, self.scale * h, self.scale * w)
+
+    def forward(self, x):
+        """Upsample an input feature map."""
+        if self.style == "pl":
+            shuffled = F.pixel_shuffle(x, self.scale)
+            offset = self.offset(shuffled)
+
+            if self.scope is not None:
+                offset = offset * self.scope(shuffled).sigmoid() * 0.5
+            else:
+                offset = offset * 0.25
+
+            offset = F.pixel_unshuffle(offset, self.scale)
+        else:
+            offset = self.offset(x)
+
+            if self.scope is not None:
+                offset = offset * self.scope(x).sigmoid() * 0.5
+            else:
+                offset = offset * 0.25
+
+        return self._sample(x, offset + self.init_pos)
