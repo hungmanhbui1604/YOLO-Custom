@@ -1,0 +1,72 @@
+# Docker metadata
+Dockerfile
+.dockerignore
+
+# Version control
+.git/
+**/.git/
+.gitignore
+**/.gitignore
+.gitattributes
+
+# Editors and local agent configuration
+.vscode/
+.idea/
+.codex/
+.agents/
+AGENTS.md
+**/AGENTS.md
+CLAUDE.md
+**/CLAUDE.md
+
+# Python bytecode, caches, and tooling artifacts
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.cache
+.pytest_cache/
+**/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local Python environments and packaging output
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# Training and experiment output
+runs/
+**/runs/
+wandb/
+**/wandb/
+
+# Generated model exports (PyTorch weights are copied by the Dockerfile)
+*.onnx
+*.engine
+*.torchscript
+*.tflite
+*.pb
+*.mlpackage
+*_openvino_model/
+*_saved_model/
+
+# Development-only content from the vendored Ultralytics source tree
+ultralytics/.github/
+ultralytics/docker/
+ultralytics/docs/
+ultralytics/examples/
+ultralytics/tests/
+
+# Logs, temporary files, and OS metadata
+*.log
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db

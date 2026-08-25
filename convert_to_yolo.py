@@ -161,7 +161,7 @@ def convert_det(src_root, out_root, splits, min_wh, report_stats):
             report_stats["DET"][split]["frames_total"] += 1
             report_stats["DET"][split]["frames_sampled"] += 1
 
-            if split == "test-dev" or split == "test" or not ann_path.exists():
+            if not ann_path.exists():
                 dst_lbl.write_text("")
                 continue
 
@@ -483,13 +483,14 @@ def convert_dronevehicle(src_root, out_root, splits, min_wh, sample_ratio, prior
 # ==============================================================================
 def generate_yaml_configs(out_root, converted_datasets):
     print("\n--- Generating Dataset YAML Configurations ---")
-    out_path = Path(out_root).resolve()
+    out_path = Path(out_root)
+    yaml_root = Path(os.path.relpath(out_path.resolve(), Path.cwd()))
 
     names_block = "\n".join([f"  {k}: {v}" for k, v in sorted(CLASS_NAMES.items())])
 
     if "det" in converted_datasets or "all" in converted_datasets:
         det_yaml = out_path / "dataset_det.yaml"
-        content = f"""path: {out_path / 'DET'}
+        content = f"""path: {yaml_root / 'DET'}
 train: train/images
 val: val/images
 test: test-dev/images
@@ -503,7 +504,7 @@ names:
 
     if "mot" in converted_datasets or "all" in converted_datasets:
         mot_yaml = out_path / "dataset_mot.yaml"
-        content = f"""path: {out_path / 'MOT'}
+        content = f"""path: {yaml_root / 'MOT'}
 train: train/images
 val: val/images
 test: test-dev/images
@@ -517,7 +518,7 @@ names:
 
     if "dronevehicle" in converted_datasets or "all" in converted_datasets:
         dv_yaml = out_path / "dataset_dronevehicle.yaml"
-        content = f"""path: {out_path / 'DroneVehicle'}
+        content = f"""path: {yaml_root / 'DroneVehicle'}
 train: train/images
 val: val/images
 test: test/images
@@ -535,15 +536,19 @@ names:
     test_paths = []
     if "det" in converted_datasets or "all" in converted_datasets:
         train_paths.append("  - DET/train/images")
+        val_paths.append("  - DET/val/images")
+        test_paths.append("  - DET/test-dev/images")
     if "mot" in converted_datasets or "all" in converted_datasets:
         train_paths.append("  - MOT/train/images")
         val_paths.append("  - MOT/val/images")
         test_paths.append("  - MOT/test-dev/images")
     if "dronevehicle" in converted_datasets or "all" in converted_datasets:
         train_paths.append("  - DroneVehicle/train/images")
+        val_paths.append("  - DroneVehicle/val/images")
+        test_paths.append("  - DroneVehicle/test/images")
 
     combined_yaml = out_path / "dataset_combined.yaml"
-    content = f"""path: {out_path}
+    content = f"""path: {yaml_root}
 train:
 {chr(10).join(train_paths)}
 val:
@@ -609,7 +614,7 @@ def main():
     parser = argparse.ArgumentParser(description="Unified VisDrone & DroneVehicle to YOLO Converter")
     parser.add_argument("--dataset", "-d", nargs="+", choices=["det", "mot", "dronevehicle", "all"], default=["all"],
                         help="Which dataset(s) to convert (default: all)")
-    parser.add_argument("--src", "-s", type=str, default="datasets", help="Root source directory containing datasets")
+    parser.add_argument("--src", "-s", type=str, default="datasets/VisDrone", help="Root source directory containing datasets")
     parser.add_argument("--out", "-o", type=str, default="datasets/VisDrone-YOLO", help="Output root directory")
     parser.add_argument("--splits", nargs="+", default=["train", "val", "test-dev"],
                         help="Splits to process (default: train val test-dev). Note: test-dev maps to test for DroneVehicle.")
@@ -618,7 +623,7 @@ def main():
     parser.add_argument("--min-wh", type=float, default=2.0, help="Minimum box width/height in pixels after clipping (default: 2.0)")
     
     # DroneVehicle class-priority sampling arguments
-    parser.add_argument("--dv-sample-ratio", type=float, default=0.5, help="Ratio of training images to sample from DroneVehicle (default: 0.5)")
+    parser.add_argument("--dv-sample-ratio", type=float, default=1.0, help="Ratio of training images to sample from DroneVehicle (default: 0.5)")
     parser.add_argument("--dv-priority-order", type=str, default="bus,van,truck,car",
                         help="Comma-separated class priority ranking for DroneVehicle sampling (default: bus,van,truck,car)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for sampling (default: 42)")

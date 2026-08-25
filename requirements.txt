@@ -1,0 +1,5 @@
+# onnx>=1.12.0,<2.0.0
+# onnxslim>=0.1.82
+# onnxruntime-gpu<1.20.0; python_version < "3.11"
+# onnxruntime-gpu>=1.20.0; python_version >= "3.11"
+# tensorrt-cu12>=7.0.0,!=10.2.0

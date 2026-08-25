@@ -6,3 +6,5 @@ AGENTS.md
 *.onnx
 .pytest_cache
 datasets/
+runs/
+__pycache__/
