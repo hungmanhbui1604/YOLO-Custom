@@ -17,7 +17,7 @@ import torch
 from ultralytics.nn.tasks import DetectionModel
 from ultralytics.utils import YAML
 
-DEFAULT_MODEL = PROJECT_ROOT / "ultralytics/cfg/models/26/yolo26-custom.yaml"
+DEFAULT_MODEL = PROJECT_ROOT / "ultralytics/cfg/models/26/yolo26-p2-custom4.yaml"
 
 
 def tensor_sizes(value: Any) -> str:

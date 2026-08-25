@@ -725,7 +725,7 @@ class PConv(nn.Module):
 class SPDConv(nn.Module):
     """Space-to-depth followed by a non-strided convolution."""
 
-    def __init__(self, c1, c2, k=3, scale=2, pconv=False, n_div=None, p=None, g=1, d=1, act=True):
+    def __init__(self, c1, c2, k=3, scale=2, pconv=False, n_div=4, p=None, g=1, d=1, act=True):
         """Initialize SPD-Conv.
 
         Args:
@@ -748,7 +748,6 @@ class SPDConv(nn.Module):
 
         c_ = c1 * scale**2
         if pconv:
-            n_div = 4 if n_div is None else n_div
             self.conv = nn.Sequential(
                 PConv(c_, k, n_div),
                 Conv(c_, c2, 1, 1, 0, g, 1, act),

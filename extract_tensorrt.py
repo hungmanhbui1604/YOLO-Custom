@@ -86,8 +86,10 @@ def main():
     # Transfer pretrained backbone weights when training custom YAML architectures
     model_name = Path(args.model).name
     if  model_name.endswith(".yaml"):
-        if "-custom" in model_name:
-            base_weight = model_name.replace("-custom.yaml", ".pt")
+        if "-p2-custom4" in model_name:
+            base_weight = model_name.replace("-p2-custom4.yaml", ".pt")
+        if "-custom4" in model_name:
+            base_weight = model_name.replace("-p2-custom4.yaml", ".pt")
         elif "-ghost-p2" in model_name:
             base_weight = model_name.replace("-ghost-p2.yaml", ".pt")
         elif "-p2" in model_name:

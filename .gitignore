@@ -4,3 +4,5 @@ AGENTS.md
 .agents
 *.pt
 *.onnx
+.pytest_cache
+datasets/
