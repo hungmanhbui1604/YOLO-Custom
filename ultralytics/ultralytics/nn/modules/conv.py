@@ -749,8 +749,10 @@ class SPDConv(nn.Module):
         c_ = c1 * scale**2
         if pconv:
             self.conv = nn.Sequential(
-                PConv(c_, k, n_div),
-                Conv(c_, c2, 1, 1, 0, g, 1, act),
+                nn.Conv2d(c_, c2, 1, 1, bias=False),
+                PConv(c2, k, n_div),
+                nn.BatchNorm2d(c2),
+                nn.SiLU()
             )
         else:
             self.conv = Conv(c_, c2, k, 1, p, g, d, act)

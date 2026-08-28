@@ -10,7 +10,7 @@ def parse_args():
     parser.add_argument("--data", "-d", type=str, default="datasets/VisDrone-YOLO/dataset_combined.yaml", help="Dataset YAML config file")
     parser.add_argument("--epochs", "-e", type=int, default=100, help="Number of training epochs")
     parser.add_argument("--batch", "-b", type=int, default=-1, help="Batch size")
-    parser.add_argument("--imgsz", type=int, default=1280, help="Target image resolution")
+    parser.add_argument("--imgsz", type=int, default=640, help="Target image resolution")
     parser.add_argument("--device", default="0", help="Computing device (e.g., '0' for GPU 0, or 'cpu')")
     parser.add_argument("--workers", type=int, default=4, help="Number of dataloader workers")
     parser.add_argument("--project", type=str, default=None, help="Save project directory")

@@ -7,12 +7,12 @@ from ultralytics import YOLO
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate Ultralytics YOLO models on UAV/Drone Detection Datasets")
-    parser.add_argument("--model", "-m", type=str, default="yolo26s.pt", help="Model checkpoint weights")
+    parser.add_argument("--model", "-m", type=str, default="best.pt", help="Model checkpoint weights")
     parser.add_argument("--data", "-d", type=str, default="datasets/VisDrone-YOLO/dataset_combined.yaml", help="Dataset YAML config file")
     parser.add_argument("--split", type=str, default="test", choices=["val", "test", "train"], help="Dataset split to evaluate on")
     parser.add_argument("--batch", "-b", type=int, default=32, help="Batch size")
-    parser.add_argument("--imgsz", type=int, default=1280, help="Target image resolution")
-    parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold")
+    parser.add_argument("--imgsz", type=int, default=640, help="Target image resolution")
+    parser.add_argument("--conf", type=float, default=0.001, help="Confidence threshold")
     parser.add_argument("--iou", type=float, default=0.7, help="NMS IoU threshold")
     parser.add_argument("--device", default="0", help="Computing device (e.g., '0' or 'cpu')")
     parser.add_argument("--workers", type=int, default=4, help="Number of dataloader workers")
