@@ -124,16 +124,6 @@ def profile_pytorch(model_path: Path, imgsz: int, batch: int,
 
     print(f"\n[INFO] Loading PyTorch model: {model_path}")
     model = YOLO(model_path)
-    # Transfer pretrained backbone weights when training custom YAML architectures
-    if model_path.suffix.lower() in {".yaml", ".yml"}:
-        model_stem = model_path.stem
-
-        if "-custom" in model_stem:
-            base_model = model_stem.split("-", maxsplit=1)[0]
-            base_weight = f"{base_model}.pt"
-
-            print(f"[INFO] Loading compatible pretrained weights from {base_weight}...")
-            model.load(base_weight)
     pt_model = model.model.to(device).eval()
 
     # ---- Params ----

@@ -83,17 +83,6 @@ def main():
     
     print(f"\n[INFO] Loading model: {args.model}")
     model = YOLO(args.model)
-    # Transfer pretrained backbone weights when training custom YAML architectures
-    model_path = args.model
-    if model_path.suffix.lower() in {".yaml", ".yml"}:
-        model_stem = model_path.stem
-
-        if "-custom" in model_stem:
-            base_model = model_stem.split("-", maxsplit=1)[0]
-            base_weight = f"{base_model}.pt"
-
-            print(f"[INFO] Loading compatible pretrained weights from {base_weight}...")
-            model.load(base_weight)
 
     if args.int8 and args.data is None:
         raise ValueError(
@@ -126,7 +115,7 @@ def main():
         export_kwargs["data"] = str(data_path)
 
     print("[INFO] TensorRT Export Configuration")
-    print(f"       Model      : {model_path}")
+    print(f"       Model      : {args.model}")
     print(f"       Image size : {args.imgsz}")
     print(f"       Batch size : {args.batch}")
     print(f"       Precision  : {'INT8' if args.int8 else 'FP16' if args.half else 'FP32'}")
@@ -139,7 +128,7 @@ def main():
     print("[INFO] Starting TensorRT export ...")
     exported_path = model.export(**export_kwargs)
 
-    engine_path = Path(exported_path) if exported_path else model_path.with_suffix(".engine")
+    engine_path = Path(exported_path) if exported_path else Path(args.model).with_suffix(".engine")
     print(f"\n[INFO] TensorRT engine saved to: {engine_path}")
     print("[INFO] Export complete.")
 
